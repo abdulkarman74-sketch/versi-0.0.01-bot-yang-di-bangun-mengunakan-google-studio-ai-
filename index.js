@@ -1,4 +1,4 @@
-import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } from '@whiskeysockets/baileys';
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers, fetchLatestBaileysVersion } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import { Boom } from '@hapi/boom';
 import path from 'path';
@@ -29,9 +29,40 @@ async function connectToWhatsApp() {
     
     // Setup auth state (multi-file)
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    console.log(`[ SYSTEM ] Menggunakan WA v${version.join('.')} (isLatest: ${isLatest})`);
+
+    // Validasi Nomor jika belum ada sesi
+    let cleanNumber = '';
+    if (!state.creds.registered) {
+        let rawNumber = config.botNumber;
+        
+        if (!rawNumber) {
+            console.log(`\n==================================================`);
+            console.log(`⚠️ WARNING: NOMOR WHATSAPP (NUMBER) TIDAK DITEMUKAN!`);
+            console.log(`==================================================`);
+            console.log(`Isi nomor di panel → Startup → Environment Variables`);
+            console.log(`Contoh: NUMBER=628xxxx`);
+            console.log(`==================================================\n`);
+            // Biarkan proses tetap hidup agar panel tidak loop restart
+            setInterval(() => {}, 1000 * 60 * 60);
+            return;
+        }
+
+        // Format Nomor: Hapus simbol selain angka (e.g., +62 858 -> 62858)
+        cleanNumber = rawNumber.replace(/[^0-9]/g, '');
+        
+        if (cleanNumber.length < 10) {
+            console.log(`\n⚠️ WARNING: Nomor "${cleanNumber}" terlalu pendek atau tidak valid!`);
+            console.log(`Isi nomor di panel → Startup → Environment Variables dengan benar.`);
+            setInterval(() => {}, 1000 * 60 * 60);
+            return;
+        }
+    }
 
     // Inisialisasi socket
     const sock = makeWASocket({
+        version,
         logger,
         printQRInTerminal: false, // Matikan QR karena pakai pairing code
         auth: state,
@@ -41,39 +72,17 @@ async function connectToWhatsApp() {
 
     // Proses Pairing Code jika belum login
     if (!sock.authState.creds.registered) {
-        // Validasi Nomor
-        let rawNumber = config.botNumber;
-        
-        if (!rawNumber) {
-            console.log(`\n==================================================`);
-            console.log(`❌ ERROR: NOMOR WHATSAPP (NUMBER) TIDAK DITEMUKAN!`);
-            console.log(`==================================================`);
-            console.log(`Silakan masukkan nomor WhatsApp di Environment Variables.`);
-            console.log(`Contoh: NUMBER=628xxxx`);
-            console.log(`==================================================\n`);
-            process.exit(1);
-        }
+        console.log(`[ INFO ] Menggunakan nomor: ${cleanNumber}`);
 
-        // Format Nomor: Hapus simbol selain angka (e.g., +62 858 -> 62858)
-        const cleanNumber = rawNumber.replace(/[^0-9]/g, '');
-        
-        if (cleanNumber.length < 10) {
-            console.log(`\n❌ ERROR: Nomor "${cleanNumber}" terlalu pendek atau tidak valid!`);
-            process.exit(1);
-        }
-
-        console.log(`[ SYSTEM ] Input nomor: ${cleanNumber}`);
-
-        // Delay 5 detik sebelum request pairing untuk menghindari error 405 (Connection Closed)
-        // Memastikan socket sudah siap sebelum meminta kode
+        // Delay 3 detik sebelum request pairing untuk memastikan socket siap
         setTimeout(async () => {
             try {
-                console.log(`[ SYSTEM ] Meminta pairing code...`);
+                console.log(`[ INFO ] Meminta pairing code...`);
                 const code = await sock.requestPairingCode(cleanNumber);
                 const formattedCode = code?.match(/.{1,4}/g)?.join('-') || code;
                 
                 console.log(`\n==================================================`);
-                console.log(`[ SUCCESS ] Kode pairing: ${formattedCode}`);
+                console.log(`[ SUCCESS ] Pairing code: ${formattedCode}`);
                 console.log(`==================================================`);
                 console.log(`1. Buka WhatsApp di HP Anda`);
                 console.log(`2. Ketuk ikon titik tiga > Perangkat Tertaut`);
@@ -82,14 +91,9 @@ async function connectToWhatsApp() {
                 console.log(`5. Masukkan kode pairing di atas\n`);
             } catch (error) {
                 console.error(`\n❌ [ ERROR ] Gagal mendapatkan pairing code:`, error?.message || error);
-                if (error?.message?.includes('405')) {
-                    console.log(`[ SYSTEM ] Error 405 terdeteksi. Mencoba ulang dalam 10 detik...`);
-                } else {
-                    console.log(`[ SYSTEM ] Terjadi kesalahan. Mencoba ulang dalam 10 detik...`);
-                }
-                setTimeout(() => connectToWhatsApp(), 10000);
+                console.log(`[ SYSTEM ] Koneksi akan dicoba ulang secara otomatis...`);
             }
-        }, 5000);
+        }, 3000);
     } else {
         console.log(`[ SYSTEM ] Sesi ditemukan, melewati proses pairing...`);
         console.log(`[ SYSTEM ] Menghubungkan ke WhatsApp...`);
@@ -115,7 +119,8 @@ async function connectToWhatsApp() {
                     fs.rmSync(sessionPath, { recursive: true, force: true });
                     console.log('🗑️ [ SYSTEM ] Folder session telah dihapus. Silakan restart bot.');
                 }
-                process.exit(0);
+                // Biarkan proses hidup agar tidak loop restart
+                setInterval(() => {}, 1000 * 60 * 60);
             }
         } else if (connection === 'open') {
             console.log(`\n✅ [ SUCCESS ] BOT BERHASIL TERSAMBUNG KE WHATSAPP!`);
