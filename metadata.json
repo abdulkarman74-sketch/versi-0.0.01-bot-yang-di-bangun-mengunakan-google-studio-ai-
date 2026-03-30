@@ -1,5 +1,5 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Keyren WhatsApp Bot",
+  "description": "A stable and lightweight WhatsApp bot using Baileys, optimized for Pterodactyl.",
   "requestFramePermissions": []
 }

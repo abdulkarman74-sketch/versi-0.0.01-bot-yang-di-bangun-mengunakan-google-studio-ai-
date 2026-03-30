@@ -5,6 +5,7 @@ export function getMenu(pushName) {
 
 🤖 *INFO BOT*
 - Nama: ${config.botName}
+- Owner: ${config.ownerNumber}
 - Status: Aktif 🟢
 - Mode: ${config.mode.toUpperCase()}
 - Prefix: [ ${config.prefix} ]
@@ -15,5 +16,5 @@ ${config.prefix}ping - Cek status bot
 ${config.prefix}self - Ubah ke mode self (Owner Only)
 ${config.prefix}public - Ubah ke mode public (Owner Only)
 
-_Bot WhatsApp Base by Baileys_`;
+_Bot WhatsApp ${config.botName} by Baileys_`;
 }
