@@ -10,7 +10,7 @@ export async function handleMessages(sock, msg, text) {
         
         const prefix = config.prefix || ".";
         const isCmd = text.startsWith(prefix);
-        const command = isCmd ? text.slice(prefix.length).trim().split(' ')[0].toLowerCase() : "";
+        const command = isCmd ? text.slice(prefix.length).trim().split(/ +/).shift().toLowerCase() : "";
         const args = text.trim().split(/ +/).slice(1);
 
         if (!isCmd) return;
@@ -27,12 +27,12 @@ export async function handleMessages(sock, msg, text) {
 
         switch (command) {
             case 'menu': {
-                const menuText = getMenu(pushName);
+                const menuText = `Halo ${pushName}!\n\n*MENU BOT*\n- ${prefix}ping\n- ${prefix}menu\n- ${prefix}self\n- ${prefix}public\n\nBot berjalan stabil di Pterodactyl 🚀`;
                 await sock.sendMessage(from, { text: menuText }, { quoted: msg });
                 break;
             }
             case 'ping': {
-                await sock.sendMessage(from, { text: 'Pong! 🏓 Bot aktif dan berjalan lancar.' }, { quoted: msg });
+                await sock.sendMessage(from, { text: 'pong' }, { quoted: msg });
                 break;
             }
             case 'self': {
