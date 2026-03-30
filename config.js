@@ -1,9 +1,9 @@
 export default {
-    // Nomor WhatsApp bot untuk pairing code (wajib diisi jika belum ada session)
-    // Awali dengan kode negara, contoh: "6281234567890"
-    botNumber: process.env.NUMBER || "6285814369350",
+    // Nomor WhatsApp bot untuk pairing code (wajib diisi di Environment Variables)
+    // Diambil dari variabel "NUMBER" di panel Pterodactyl
+    botNumber: process.env.NUMBER || "",
 
-    // Ganti dengan nomor WhatsApp owner (awali dengan kode negara, contoh: 6281234567890)
+    // Nomor WhatsApp owner (diambil dari variabel "OWNER")
     ownerNumber: process.env.OWNER || "6285814369350",
     
     // Nama bot Anda

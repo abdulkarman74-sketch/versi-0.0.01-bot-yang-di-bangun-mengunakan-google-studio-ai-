@@ -23,7 +23,7 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 async function connectToWhatsApp() {
-    console.log('🔄 Memulai koneksi ke WhatsApp...');
+    console.log('[ SYSTEM ] Memulai koneksi ke WhatsApp...');
     
     const sessionPath = path.join(__dirname, 'session');
     
@@ -41,37 +41,58 @@ async function connectToWhatsApp() {
 
     // Proses Pairing Code jika belum login
     if (!sock.authState.creds.registered) {
-        setTimeout(async () => {
-            const phoneNumber = config.botNumber;
-            if (!phoneNumber || phoneNumber === "6285814369350") {
-                console.log(`\n==================================================`);
-                console.log(`⚠️ PERINGATAN: MENGGUNAKAN NOMOR DEFAULT!`);
-                console.log(`Pastikan nomor ${phoneNumber} adalah nomor WhatsApp bot Anda.`);
-                console.log(`Jika bukan, atur NUMBER di Environment Variables Pterodactyl.`);
-                console.log(`==================================================\n`);
-            }
-
-            const cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
+        // Validasi Nomor
+        let rawNumber = config.botNumber;
+        
+        if (!rawNumber) {
             console.log(`\n==================================================`);
-            console.log(`📱 MEREQUEST KODE PAIRING UNTUK NOMOR: ${cleanNumber}`);
+            console.log(`❌ ERROR: NOMOR WHATSAPP (NUMBER) TIDAK DITEMUKAN!`);
+            console.log(`==================================================`);
+            console.log(`Silakan masukkan nomor WhatsApp di Environment Variables.`);
+            console.log(`Contoh: NUMBER=628xxxx`);
             console.log(`==================================================\n`);
-            
+            process.exit(1);
+        }
+
+        // Format Nomor: Hapus simbol selain angka (e.g., +62 858 -> 62858)
+        const cleanNumber = rawNumber.replace(/[^0-9]/g, '');
+        
+        if (cleanNumber.length < 10) {
+            console.log(`\n❌ ERROR: Nomor "${cleanNumber}" terlalu pendek atau tidak valid!`);
+            process.exit(1);
+        }
+
+        console.log(`[ SYSTEM ] Input nomor: ${cleanNumber}`);
+
+        // Delay 5 detik sebelum request pairing untuk menghindari error 405 (Connection Closed)
+        // Memastikan socket sudah siap sebelum meminta kode
+        setTimeout(async () => {
             try {
+                console.log(`[ SYSTEM ] Meminta pairing code...`);
                 const code = await sock.requestPairingCode(cleanNumber);
                 const formattedCode = code?.match(/.{1,4}/g)?.join('-') || code;
                 
                 console.log(`\n==================================================`);
-                console.log(`🔑 KODE PAIRING ANDA: ${formattedCode}`);
+                console.log(`[ SUCCESS ] Kode pairing: ${formattedCode}`);
                 console.log(`==================================================`);
                 console.log(`1. Buka WhatsApp di HP Anda`);
-                console.log(`2. Ketuk ikon titik tiga (opsi lainnya) > Perangkat Tertaut`);
+                console.log(`2. Ketuk ikon titik tiga > Perangkat Tertaut`);
                 console.log(`3. Ketuk 'Tautkan Perangkat'`);
                 console.log(`4. Ketuk 'Tautkan dengan nomor telepon saja'`);
                 console.log(`5. Masukkan kode pairing di atas\n`);
             } catch (error) {
-                console.error('Gagal mendapatkan kode pairing:', error?.message || error);
+                console.error(`\n❌ [ ERROR ] Gagal mendapatkan pairing code:`, error?.message || error);
+                if (error?.message?.includes('405')) {
+                    console.log(`[ SYSTEM ] Error 405 terdeteksi. Mencoba ulang dalam 10 detik...`);
+                } else {
+                    console.log(`[ SYSTEM ] Terjadi kesalahan. Mencoba ulang dalam 10 detik...`);
+                }
+                setTimeout(() => connectToWhatsApp(), 10000);
             }
-        }, 3000);
+        }, 5000);
+    } else {
+        console.log(`[ SYSTEM ] Sesi ditemukan, melewati proses pairing...`);
+        console.log(`[ SYSTEM ] Menghubungkan ke WhatsApp...`);
     }
 
     // Event listener untuk koneksi
@@ -82,25 +103,25 @@ async function connectToWhatsApp() {
             const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
             const shouldReconnect = reason !== DisconnectReason.loggedOut;
             
-            console.log(`\n❌ Koneksi terputus (Alasan: ${reason}).`);
+            console.log(`\n❌ [ SYSTEM ] Koneksi terputus (Alasan: ${reason}).`);
             
             if (shouldReconnect) {
-                console.log('🔄 Mencoba menghubungkan kembali dalam 5 detik...');
+                console.log('[ SYSTEM ] Mencoba menghubungkan kembali dalam 5 detik...');
                 setTimeout(connectToWhatsApp, 5000); // Delay aman sebelum reconnect
             } else {
-                console.log('⚠️ Sesi telah logout. Silakan hapus folder "session" dan jalankan ulang.');
+                console.log('⚠️ [ SYSTEM ] Sesi telah logout. Silakan hapus folder "session" dan jalankan ulang.');
                 // Hapus folder session jika logout agar bisa pairing ulang
                 if (fs.existsSync(sessionPath)) {
                     fs.rmSync(sessionPath, { recursive: true, force: true });
-                    console.log('🗑️ Folder session telah dihapus. Silakan restart bot.');
+                    console.log('🗑️ [ SYSTEM ] Folder session telah dihapus. Silakan restart bot.');
                 }
                 process.exit(0);
             }
         } else if (connection === 'open') {
-            console.log(`\n✅ BOT BERHASIL TERSAMBUNG KE WHATSAPP!`);
+            console.log(`\n✅ [ SUCCESS ] BOT BERHASIL TERSAMBUNG KE WHATSAPP!`);
             console.log(`==================================================`);
             console.log(`🤖 Nama Bot : ${config.botName}`);
-            console.log(`👑 Owner    : ${config.ownerName}`);
+            console.log(`👑 Owner    : ${config.ownerNumber}`);
             console.log(`⚙️ Mode     : ${config.mode.toUpperCase()}`);
             console.log(`📌 Prefix   : [ ${config.prefix} ]`);
             console.log(`==================================================\n`);
