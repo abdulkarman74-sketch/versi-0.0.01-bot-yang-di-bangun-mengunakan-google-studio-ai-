@@ -1,34 +1,19 @@
 import config from './config.js';
 import { getMenu } from './menu.js';
 
-export async function handleMessages(sock, msg) {
+export async function handleMessages(sock, msg, text) {
     try {
         const from = msg.key.remoteJid;
         const isGroup = from.endsWith('@g.us');
         const sender = isGroup ? msg.key.participant : from;
         const pushName = msg.pushName || "User";
         
-        // Dapatkan tipe pesan
-        const messageType = Object.keys(msg.message)[0];
-        
-        // Dapatkan isi pesan (teks)
-        let body = '';
-        if (messageType === 'conversation') {
-            body = msg.message.conversation;
-        } else if (messageType === 'extendedTextMessage') {
-            body = msg.message.extendedTextMessage?.text || '';
-        } else if (messageType === 'imageMessage' && msg.message.imageMessage?.caption) {
-            body = msg.message.imageMessage.caption;
-        } else if (messageType === 'videoMessage' && msg.message.videoMessage?.caption) {
-            body = msg.message.videoMessage.caption;
-        }
+        const prefix = config.prefix || ".";
+        const isCmd = text.startsWith(prefix);
+        const command = isCmd ? text.slice(prefix.length).trim().split(' ')[0].toLowerCase() : "";
+        const args = text.trim().split(/ +/).slice(1);
 
-        // Cek apakah pesan menggunakan prefix
-        if (!body.startsWith(config.prefix)) return;
-
-        // Pisahkan command dan argumen
-        const args = body.slice(config.prefix.length).trim().split(/ +/);
-        const command = args.shift().toLowerCase();
+        if (!isCmd) return;
 
         // Cek apakah pengirim adalah owner
         const isOwner = sender.includes(config.ownerNumber) || msg.key.fromMe;
@@ -37,6 +22,7 @@ export async function handleMessages(sock, msg) {
         if (config.mode === 'self' && !isOwner) return;
 
         // Log command
+        console.log("Command diterima:", command);
         console.log(`[COMMAND] ${command} dari ${pushName} (${sender})`);
 
         switch (command) {

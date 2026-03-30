@@ -137,16 +137,30 @@ async function connectToWhatsApp() {
     sock.ev.on('creds.update', saveCreds);
 
     // Event listener untuk pesan masuk
-    sock.ev.on('messages.upsert', async (m) => {
+    sock.ev.on('messages.upsert', async ({ messages }) => {
         try {
-            // Hanya proses pesan baru
-            if (m.type !== 'notify') return;
+            const m = messages[0];
+            if (!m.message) return;
+            if (m.key && m.key.remoteJid === 'status@broadcast') return;
             
-            const msg = m.messages[0];
-            if (!msg.message) return;
-            if (msg.key.fromMe && config.mode !== 'self') return; // Jangan respon pesan sendiri kecuali mode self
+            // Tambahkan log untuk memastikan bot menerima pesan
+            console.log(m);
             
-            await handleMessages(sock, msg);
+            // Jangan respon pesan sendiri kecuali mode self
+            if (m.key.fromMe && config.mode !== 'self') return;
+            
+            const msg = m.message;
+            const text = msg.conversation || 
+                         msg.extendedTextMessage?.text || 
+                         msg.imageMessage?.caption || 
+                         msg.videoMessage?.caption || 
+                         "";
+                         
+            if (!text) return;
+            
+            console.log("Pesan masuk:", text);
+            
+            await handleMessages(sock, m, text);
         } catch (error) {
             console.error('Error handling message:', error);
         }
