@@ -1,0 +1,99 @@
+import { makeWASocket, useMultiFileAuthState, DisconnectReason, Browsers } from '@whiskeysockets/baileys';
+import pino from 'pino';
+import { Boom } from '@hapi/boom';
+import config from './config.js';
+import { question } from './pairing.js';
+import { handleMessages } from './handler.js';
+
+// Setup logger (silent agar terminal clean)
+const logger = pino({ level: 'silent' });
+
+async function connectToWhatsApp() {
+    console.log('🔄 Memulai koneksi ke WhatsApp...');
+    
+    // Setup auth state (multi-file)
+    const { state, saveCreds } = await useMultiFileAuthState('session');
+
+    // Inisialisasi socket
+    const sock = makeWASocket({
+        logger,
+        printQRInTerminal: false, // Matikan QR karena pakai pairing code
+        auth: state,
+        browser: Browsers.ubuntu('Chrome'), // Browser yang digunakan
+        generateHighQualityLinkPreview: true,
+    });
+
+    // Proses Pairing Code jika belum login
+    if (!sock.authState.creds.registered) {
+        setTimeout(async () => {
+            console.log(`\n==================================================`);
+            console.log(`📱 SILAKAN MASUKKAN NOMOR WHATSAPP ANDA`);
+            console.log(`Contoh: 6281234567890 (awali dengan kode negara)`);
+            console.log(`==================================================\n`);
+            
+            const phoneNumber = await question('> Nomor WA: ');
+            const cleanNumber = phoneNumber.replace(/[^0-9]/g, '');
+            
+            try {
+                const code = await sock.requestPairingCode(cleanNumber);
+                const formattedCode = code?.match(/.{1,4}/g)?.join('-') || code;
+                
+                console.log(`\n==================================================`);
+                console.log(`🔑 KODE PAIRING ANDA: ${formattedCode}`);
+                console.log(`==================================================`);
+                console.log(`1. Buka WhatsApp di HP Anda`);
+                console.log(`2. Ketuk ikon titik tiga (opsi lainnya) > Perangkat Tertaut`);
+                console.log(`3. Ketuk 'Tautkan Perangkat'`);
+                console.log(`4. Ketuk 'Tautkan dengan nomor telepon saja'`);
+                console.log(`5. Masukkan kode pairing di atas\n`);
+            } catch (error) {
+                console.error('Gagal mendapatkan kode pairing:', error.message);
+            }
+        }, 3000);
+    }
+
+    // Event listener untuk koneksi
+    sock.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect } = update;
+        
+        if (connection === 'close') {
+            const reason = new Boom(lastDisconnect?.error)?.output?.statusCode;
+            const shouldReconnect = reason !== DisconnectReason.loggedOut;
+            
+            console.log(`\n❌ Koneksi terputus (Alasan: ${reason}).`);
+            
+            if (shouldReconnect) {
+                console.log('🔄 Mencoba menghubungkan kembali...');
+                connectToWhatsApp();
+            } else {
+                console.log('⚠️ Sesi telah logout. Silakan hapus folder "session" dan jalankan ulang.');
+            }
+        } else if (connection === 'open') {
+            console.log(`\n✅ BOT BERHASIL TERSAMBUNG KE WHATSAPP!`);
+            console.log(`==================================================`);
+            console.log(`🤖 Nama Bot : ${config.botName}`);
+            console.log(`👑 Owner    : ${config.ownerName}`);
+            console.log(`⚙️ Mode     : ${config.mode.toUpperCase()}`);
+            console.log(`📌 Prefix   : [ ${config.prefix} ]`);
+            console.log(`==================================================\n`);
+        }
+    });
+
+    // Simpan kredensial saat ada update
+    sock.ev.on('creds.update', saveCreds);
+
+    // Event listener untuk pesan masuk
+    sock.ev.on('messages.upsert', async (m) => {
+        // Hanya proses pesan baru
+        if (m.type !== 'notify') return;
+        
+        const msg = m.messages[0];
+        if (!msg.message) return;
+        if (msg.key.fromMe && config.mode !== 'self') return; // Jangan respon pesan sendiri kecuali mode self
+        
+        await handleMessages(sock, msg);
+    });
+}
+
+// Jalankan bot
+connectToWhatsApp();
